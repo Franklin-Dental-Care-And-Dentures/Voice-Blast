@@ -1,0 +1,551 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Voice Blast</title>
+<style>
+  :root { --pad: 14px; --brand: #2563eb; --brand2:#7c3aed; }
+  * { box-sizing: border-box; }
+  body {
+    font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Arial;
+    max-width: 760px;
+    margin: 24px auto;
+    padding: 0 var(--pad) 40px;
+    color: #111827;
+    background:
+      radial-gradient(800px 300px at 10% -80px, rgba(124,58,237,.08), transparent 60%),
+      radial-gradient(800px 300px at 110% -80px, rgba(37,99,235,.10), transparent 60%),
+      #f9fafb;
+  }
+  h1 { margin: 0 0 10px; font-size: 24px; font-weight: 800; letter-spacing: -.02em; }
+  .sub { color:#6b7280; margin-bottom:18px; }
+  .card {
+    background: white;
+    border: 1px solid #e5e7eb;
+    border-radius: 18px;
+    padding: 18px;
+    box-shadow: 0 10px 24px rgba(2,6,23,.06), 0 2px 8px rgba(2,6,23,.04);
+  }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin: 12px 0; }
+  .row.single { grid-template-columns: 1fr; }
+  label { font-size: 13px; color: #374151; display:block; margin-bottom: 6px; font-weight: 600; }
+  input, select, textarea {
+    width: 100%; padding: 12px 12px; border: 1px solid #d1d5db; border-radius: 12px; background: #fff;
+  }
+  textarea { min-height: 120px; resize: vertical; }
+  button {
+    padding: 12px 16px; border: 0; border-radius: 12px; cursor: pointer; font-weight: 700; letter-spacing: .2px;
+    box-shadow: 0 1px 0 rgba(0,0,0,.04);
+    transition: transform .04s ease, filter .15s ease;
+  }
+  button:active { transform: translateY(1px); }
+  .primary { background: linear-gradient(90deg, var(--brand), #1d4ed8); color: white; }
+  .ghost { background: #f3f4f6; }
+  .danger { background: linear-gradient(90deg, #ef4444, #dc2626); color: white; }
+  .muted { color: #6b7280; font-size: 13px; }
+  .status { margin-top: 8px; min-height: 24px; font-size: 13px; }
+  .footer { margin-top: 18px; font-size: 12px; color: #6b7280; text-align:center; }
+
+  .badge { display:inline-block; padding:2px 8px; border-radius:999px; background:#eef2ff; color:#3730a3; font-size:11px; margin-left:8px; }
+
+  .btns { display:flex; gap:10px; flex-wrap:wrap; }
+  .btns button { flex: 1 1 140px; }
+
+  .thumbs { display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; margin-top:6px; }
+  @media (max-width:540px){ .thumbs { grid-template-columns: repeat(3, 1fr);} }
+  .thumb { position:relative; border:1px solid #e5e7eb; border-radius:10px; overflow:hidden; background:#f8fafc; }
+  .thumb img { width:100%; height:100%; object-fit:cover; display:block; aspect-ratio:1/1; }
+  .thumb .x { position:absolute; top:4px; right:4px; background:#fff; border-radius:8px; border:1px solid #e5e7eb; font-size:11px; padding:0 6px; cursor:pointer; }
+
+  .meter {
+    display:flex; align-items:center; gap:10px;
+    padding:10px; border:1px solid #e5e7eb; border-radius:12px; background:#fafafa;
+  }
+  .bar-wrap { position:relative; flex:1; height:12px; background:#e5e7eb; border-radius:999px; overflow:hidden; }
+  .bar { position:absolute; top:0; left:0; height:100%; width:0%; background:linear-gradient(90deg, #34d399, #10b981); }
+  .peak { position:absolute; top:-2px; width:2px; height:16px; background:#11182722; right:0; opacity:.6; }
+  .mic-dot { width:10px; height:10px; border-radius:999px; background:#9ca3af; }
+  .mic-dot.on { background:#10b981; box-shadow:0 0 0 4px #10b98122; }
+</style>
+</head>
+<body>
+  <!-- 🔒 PIN Gate Overlay -->
+  <div id="pinGate" style="
+    position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+    background:linear-gradient(120deg, rgba(124,58,237,.08), rgba(37,99,235,.10)), rgba(249,250,251,.85);
+    backdrop-filter: blur(6px); z-index:9999;">
+    <div style="width:100%; max-width:360px; background:#fff; border:1px solid #e5e7eb; border-radius:16px; padding:18px;
+                box-shadow:0 12px 28px rgba(2,6,23,.10);">
+      <h3 style="margin:0 0 6px; font:600 18px/1.3 system-ui, -apple-system;">Enter PIN</h3>
+      <p class="muted" style="margin:0 0 12px;">Only authorized senders may use this tool.</p>
+
+      <label for="pinInput" style="font-size:13px; color:#374151; font-weight:600; display:block; margin:0 0 6px;">Access PIN</label>
+      <input id="pinInput" type="password" inputmode="numeric" autocomplete="one-time-code" placeholder="••••"
+             style="width:100%; padding:12px; border:1px solid #d1d5db; border-radius:12px;">
+
+      <div style="display:flex; gap:8px; margin-top:12px;">
+        <button id="pinUnlock" class="primary" style="flex:1;">Unlock</button>
+        <button id="pinClear" class="ghost" style="flex:0 0 auto;">Clear</button>
+      </div>
+
+      <div id="pinMsg" class="muted" style="min-height:20px; margin-top:10px;"></div>
+    </div>
+  </div>
+  <!-- 🔒 End PIN Gate -->
+
+  <header style="display:flex; align-items:center; gap:12px; margin-bottom:14px;">
+    <div style="width:36px; height:36px; border-radius:12px; background:linear-gradient(135deg, var(--brand), var(--brand2)); box-shadow:0 8px 16px rgba(37,99,235,.25);"></div>
+    <div>
+      <h1>Speak &amp; Send</h1>
+      <div class="sub">Tap Record, say your message, Stop, then Send. Your recording, images, and text preview are sent securely to Make.</div>
+    </div>
+  </header>
+
+  <div class="card">
+    <div class="row">
+      <div>
+        <label for="audience">Audience</label>
+        <select id="audience">
+          <option value="all">All Staff</option>
+          <option value="managers">Managers</option>
+          <option value="frontdesk">Front Office</option>
+          <option value="backoffice">Back Office</option>
+          <option value="testers">Testing</option>
+        </select>
+      </div>
+      <div>
+        <label for="subject">Subject (optional)</label>
+        <input id="subject" placeholder="E.g., Quick update for today" />
+      </div>
+    </div>
+
+    <div class="row single">
+      <div>
+        <label for="sender">Your name (for signature)</label>
+        <input id="sender" placeholder="e.g., Michael Jackson" />
+        <div class="muted" style="margin-top:6px;">If provided, your message will end with “— Your Name”.</div>
+      </div>
+    </div>
+
+    <div class="row single">
+      <div>
+        <label for="images">Add images (camera or library)</label>
+        <input id="images" type="file" accept="image/*" capture="environment" multiple />
+        <div class="muted" style="margin-top:6px;">
+          warning: this feature has been temporarily disabled and will return (9/20/25)
+        </div>
+        <div id="thumbs" class="thumbs"></div>
+      </div>
+    </div>
+
+    <div class="row single">
+      <div class="btns">
+        <button id="recBtn" class="danger">● Record</button>
+        <button id="stopBtn" class="ghost" disabled>■ Stop</button>
+        <button id="sendBtn" class="primary" disabled>✉ Send</button>
+        <button id="resetBtn" class="ghost">↺ Reset</button>
+      </div>
+    </div>
+
+    <div class="row">
+      <div>
+        <label>Microphone level</label>
+        <div class="meter">
+          <div id="micDot" class="mic-dot" title="Mic status"></div>
+          <div class="bar-wrap">
+            <div id="bar" class="bar"></div>
+            <div id="peak" class="peak" style="display:none"></div>
+          </div>
+          <div id="dbText" class="muted" style="min-width:64px; text-align:right;">– dB</div>
+        </div>
+        <div class="muted" style="margin-top:6px;">Moves while recording. If it’s flat, check your mic permission or input.</div>
+      </div>
+      <div>
+        <label>
+          <input type="checkbox" id="livePreviewToggle" />
+          Live text preview
+        </label>
+        <div id="srSupport" class="muted" style="margin:6px 0 8px;"></div>
+        <label for="preview">Text preview (beta) <span class="badge">Web Speech</span></label>
+        <textarea id="preview" placeholder="Your words will appear here while recording…" readonly></textarea>
+      </div>
+    </div>
+
+    <div class="status" id="status"></div>
+  </div>
+
+  <div class="footer">
+    Tip: If this page says microphone permission is blocked, allow mic access in your browser settings for this site.
+  </div>
+
+<script>
+  /* ====== PIN Gate (always ask) ====== */
+
+// Optional allowlist for soft/local check (real check still in Make)
+const ALLOWED_PINS = ["0824"]; // leave [] and enforce in Make only
+
+// Elements
+const pinGate   = document.getElementById('pinGate');
+const pinInput  = document.getElementById('pinInput');
+const pinUnlock = document.getElementById('pinUnlock');
+const pinClear  = document.getElementById('pinClear');
+const pinMsg    = document.getElementById('pinMsg');
+
+let pinAttempts = 0;
+let pinLockedUntil = 0;
+
+function showGate(show) {
+  if (!pinGate) return;
+  pinGate.style.display = show ? "flex" : "none";
+  document.body.style.overflow = show ? "hidden" : "";
+}
+
+function softValidate(pin) {
+  if (!ALLOWED_PINS.length) return true; 
+  return ALLOWED_PINS.includes(String(pin).trim());
+}
+
+function lockout(ms) {
+  pinLockedUntil = Date.now() + ms;
+  pinMsg.textContent = `Too many attempts. Try again in ${(ms/1000)|0}s.`;
+}
+
+function tryUnlock() {
+  if (Date.now() < pinLockedUntil) return;
+  const pin = (pinInput.value || "").trim();
+  if (!pin) { pinMsg.textContent = "Enter your PIN."; return; }
+
+  if (softValidate(pin)) {
+    showGate(false);
+    pinMsg.textContent = "";
+  } else {
+    pinAttempts++;
+    pinMsg.textContent = "Incorrect PIN.";
+    if (pinAttempts >= 5) { pinAttempts = 0; lockout(30 * 1000); } // 30s lockout
+  }
+}
+
+// Wire buttons
+if (pinUnlock) pinUnlock.onclick = tryUnlock;
+if (pinClear)  pinClear.onclick  = () => { pinInput.value = ""; pinMsg.textContent = ""; };
+
+// Always show gate on load
+showGate(true);
+
+// Expose helper to include with uploads
+function currentPinForSubmission() {
+  return (pinInput && pinInput.value || "").trim();
+}
+/* ====== Config ====== */
+const WEBHOOK = "https://hook.us2.make.com/v1ts24nel5225ryo896lvd5mswb24m69";
+const SECRET = "Secret123";
+
+/* ====== State ====== */
+let mediaRecorder, chunks = [], lastBlob = null, lastMime = null;
+let stream = null;
+
+/* ====== Speech Recognition ====== */
+const SR = window.SpeechRecognition || window.webkitSpeechRecognition || null;
+let recognition = null;
+let interimTxt = "", finalTxt = "";
+const previewEl = document.getElementById('preview');
+const liveToggle = document.getElementById('livePreviewToggle');
+const srSupportEl = document.getElementById('srSupport');
+
+if (SR) {
+  srSupportEl.textContent = "Supported in this browser.";
+} else {
+  srSupportEl.textContent = "Not supported in this browser. Try Chrome on desktop.";
+  liveToggle.disabled = true;
+}
+
+function startRecognition() {
+  if (!SR || !liveToggle.checked) return;
+  interimTxt = ""; finalTxt = "";
+  recognition = new SR();
+  recognition.lang = 'en-US';
+  recognition.continuous = true;
+  recognition.interimResults = true;
+
+  recognition.onresult = (event) => {
+    interimTxt = "";
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      const res = event.results[i];
+      if (res.isFinal) {
+        finalTxt += res[0].transcript + " ";
+      } else {
+        interimTxt += res[0].transcript;
+      }
+    }
+    previewEl.value = (finalTxt + (interimTxt ? " " + interimTxt : "")).trim();
+  };
+
+  recognition.onerror = (e) => console.warn("SpeechRecognition error:", e.error);
+  recognition.onend = () => {
+    if (mediaRecorder && mediaRecorder.state === "recording" && liveToggle.checked) {
+      try { recognition.start(); } catch {}
+    }
+  };
+
+  try { recognition.start(); } catch (e) { console.warn(e); }
+}
+function stopRecognition() {
+  try { recognition && recognition.stop(); } catch {}
+  recognition = null;
+}
+
+/* ====== Audio Recording ====== */
+function extFor(mime) {
+  if (!mime) return "webm";
+  if (mime.includes("webm")) return "webm";
+  if (mime.includes("ogg")) return "ogg";
+  if (mime.includes("mp4")) return "m4a";
+  if (mime.includes("aac")) return "aac";
+  if (mime.includes("wav")) return "wav";
+  return "webm";
+}
+
+/* Elements */
+const recBtn = document.getElementById('recBtn');
+const stopBtn = document.getElementById('stopBtn');
+const sendBtn = document.getElementById('sendBtn');
+const resetBtn = document.getElementById('resetBtn');
+const statusEl = document.getElementById('status');
+const imagesInput = document.getElementById('images');
+const thumbsEl = document.getElementById('thumbs');
+const micDot = document.getElementById('micDot');
+const barEl = document.getElementById('bar');
+const dbText = document.getElementById('dbText');
+const peakEl = document.getElementById('peak');
+
+/* ====== Volume Meter (Web Audio) ====== */
+let audioCtx = null, analyser = null, sourceNode = null, rafId = null;
+function startMeter(s) {
+  stopMeter();
+  audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+  analyser = audioCtx.createAnalyser();
+  analyser.fftSize = 2048;
+  sourceNode = audioCtx.createMediaStreamSource(s);
+  sourceNode.connect(analyser);
+
+  micDot.classList.add('on');
+  peakEl.style.display = '';
+
+  const data = new Uint8Array(analyser.fftSize);
+  let peak = 0, lastPeakAt = 0;
+
+  const loop = () => {
+    analyser.getByteTimeDomainData(data);
+    let sum = 0;
+    for (let i = 0; i < data.length; i++) {
+      const v = (data[i] - 128) / 128;
+      sum += v * v;
+    }
+    const rms = Math.sqrt(sum / data.length);
+    const db = rms > 0 ? (20 * Math.log10(rms)) : -Infinity;
+    const pct = Math.min(100, Math.max(0, Math.round(rms * 160)));
+
+    barEl.style.width = pct + '%';
+    dbText.textContent = (db === -Infinity) ? '–∞ dB' : `${db.toFixed(1)} dB`;
+
+    const now = performance.now();
+    if (pct > peak || (now - lastPeakAt) > 1500) {
+      peak = pct;
+      lastPeakAt = now;
+    } else {
+      peak = Math.max(0, peak - 0.4);
+    }
+    peakEl.style.left = `calc(${peak}% - 1px)`;
+
+    rafId = requestAnimationFrame(loop);
+  };
+  loop();
+}
+function stopMeter() {
+  if (rafId) cancelAnimationFrame(rafId);
+  rafId = null;
+  try { sourceNode && sourceNode.disconnect(); } catch {}
+  try { analyser && analyser.disconnect(); } catch {}
+  try { audioCtx && audioCtx.close(); } catch {}
+  sourceNode = analyser = audioCtx = null;
+  barEl.style.width = '0%';
+  dbText.textContent = '– dB';
+  micDot.classList.remove('on');
+  peakEl.style.display = 'none';
+}
+
+/* ====== Images (with optional shrink) ====== */
+let imageBlobs = [];
+function renderThumbs() {
+  thumbsEl.innerHTML = "";
+  imageBlobs.forEach((item, idx) => {
+    const url = URL.createObjectURL(item.blob);
+    const div = document.createElement('div');
+    div.className = 'thumb';
+    div.innerHTML = `<img src="${url}" alt="photo ${idx+1}"><button class="x" title="Remove">×</button>`;
+    div.querySelector('.x').onclick = () => {
+      imageBlobs.splice(idx, 1);
+      renderThumbs();
+    };
+    thumbsEl.appendChild(div);
+  });
+}
+async function maybeShrink(file, maxSide = 1600, quality = 0.85) {
+  if (file.size < 1.5 * 1024 * 1024) {
+    return new Blob([await file.arrayBuffer()], { type: file.type || 'image/jpeg' });
+  }
+  try {
+    const dataUrl = await new Promise((resolve, reject) => {
+      const fr = new FileReader();
+      fr.onload = () => resolve(fr.result);
+      fr.onerror = reject;
+      fr.readAsDataURL(file);
+    });
+    const img = await new Promise((resolve, reject) => {
+      const i = new Image();
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error('decode-failed'));
+      i.src = dataUrl;
+    });
+    const { width, height } = img;
+    const scale = Math.min(1, maxSide / Math.max(width, height));
+    const outW = Math.max(1, Math.round(width * scale));
+    const outH = Math.max(1, Math.round(height * scale));
+    const canvas = document.createElement('canvas');
+    canvas.width = outW; canvas.height = outH;
+    const ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, outW, outH);
+    const blob = await new Promise(res => canvas.toBlob(res, 'image/jpeg', quality));
+    return blob || file;
+  } catch {
+    return file;
+  }
+}
+imagesInput.addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+  const room = Math.max(0, 10 - imageBlobs.length);
+  const take = files.slice(0, room);
+  for (const f of take) {
+    const shrunk = await maybeShrink(f);
+    const base = (f.name || 'photo').replace(/\.[^/.]+$/, '');
+    const name = base + '.jpg';
+    imageBlobs.push({ blob: shrunk, name });
+  }
+  renderThumbs();
+});
+
+/* ====== Controls ====== */
+recBtn.onclick = async () => {
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    chunks = [];
+    try { mediaRecorder = new MediaRecorder(stream); }
+    catch (e) { mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' }); }
+    lastMime = mediaRecorder.mimeType || null;
+
+    mediaRecorder.ondataavailable = e => chunks.push(e.data);
+    mediaRecorder.onstop = () => {
+      const type = chunks[0]?.type || lastMime || 'audio/webm';
+      lastBlob = new Blob(chunks, { type });
+      sendBtn.disabled = false;
+      const seconds = Math.max(1, Math.round((lastBlob.size / 32000)));
+      statusEl.textContent = `Recorded ~${seconds}s · ${(lastBlob.size/1024).toFixed(1)} KB (${type})`;
+      try { stream.getTracks().forEach(t => t.stop()); } catch {}
+      stream = null;
+      stopMeter();
+    };
+
+    mediaRecorder.start();
+    recBtn.disabled = true; stopBtn.disabled = false; sendBtn.disabled = true;
+    statusEl.textContent = "Recording…";
+    startRecognition();
+    startMeter(stream);
+  } catch (e) {
+    console.error(e);
+    alert('Microphone permission is required. Please allow access.');
+  }
+};
+
+stopBtn.onclick = () => {
+  try { mediaRecorder?.stop(); } catch {}
+  recBtn.disabled = false; stopBtn.disabled = true;
+  statusEl.textContent = "Stopped. Ready to send.";
+  stopRecognition();
+  stopMeter();
+  try { stream && stream.getTracks().forEach(t => t.stop()); } catch {}
+  stream = null;
+};
+
+sendBtn.onclick = async () => {
+  if (!lastBlob) return;
+  statusEl.textContent = "Uploading…";
+  const audience = document.getElementById('audience').value;
+  const subject = document.getElementById('subject').value;
+  const sender = (document.getElementById('sender').value || "").trim();
+  const filename = `note.${extFor(lastBlob.type)}`;
+
+  let transcript = (previewEl.value || "").trim();
+  if (sender) transcript = transcript ? `${transcript}\n\n— ${sender}` : `— ${sender}`;
+
+  const fd = new FormData();
+  fd.append('audio', lastBlob, filename);
+  fd.append('audience', audience);
+  fd.append('subject', subject);
+  fd.append('secret', SECRET);
+  fd.append('sender', sender);
+  fd.append('transcript', transcript);
+
+  const names = [];
+  for (let i = 0; i < imageBlobs.length; i++) {
+    const { blob, name } = imageBlobs[i];
+    const n = name || `image-${i+1}.jpg`;
+    names.push(n);
+    fd.append('images', blob, n);
+    fd.append('images[]', blob, n);
+  }
+  fd.append('images_count', String(imageBlobs.length));
+  fd.append('images_names', names.join(', '));
+
+  try {
+    const res = await fetch(WEBHOOK, { method: 'POST', body: fd });
+    statusEl.textContent = res.ok ? "Sent to Make ✅" : "Sent (check Make) ✅";
+  } catch (e) {
+    statusEl.textContent = "Failed to send ❌ (see console)";
+    console.error(e);
+  }
+}; /* <-- THIS CLOSING BRACE/SEMICOLON WAS MISSING */
+
+resetBtn.onclick = () => {
+  try { mediaRecorder?.stop(); } catch {}
+  stopRecognition();
+  stopMeter();
+  try { stream && stream.getTracks().forEach(t => t.stop()); } catch {}
+  stream = null;
+
+  lastBlob = null; chunks = []; lastMime = null;
+  previewEl.value = "";
+  document.getElementById('subject').value = "";
+  document.getElementById('sender').value = "";
+  statusEl.textContent = "";
+
+  imagesInput.value = "";
+  imageBlobs = [];
+  renderThumbs();
+
+  recBtn.disabled = false;
+  stopBtn.disabled = true;
+  sendBtn.disabled = true;
+};
+
+liveToggle.addEventListener('change', () => {
+  if (!liveToggle.checked) {
+    stopRecognition();
+  } else if (mediaRecorder && mediaRecorder.state === "recording") {
+    startRecognition();
+  }
+});
+</script>
+</body>
+</html>
